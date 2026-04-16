@@ -4,9 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use Illuminate\Http\Request;
+use App\Http\Requests\StoreProductRequest; 
+use Illuminate\Support\Facades\Log; 
+use Illuminate\Database\QueryException;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class ProductController extends Controller
 {
+    use AuthorizesRequests;
+
     public function index()
     {
         $products = Product::all();
@@ -15,35 +21,40 @@ class ProductController extends Controller
 
     public function create()
     {
-        // Cek policy: hanya admin yang boleh
         $this->authorize('create', Product::class);
-
         return view('products.create');
     }
 
-    public function store(Request $request)
+    public function store(StoreProductRequest $request)
     {
         $this->authorize('create', Product::class);
 
-        $request->validate([
-            'name'  => 'required|string|max:255',
-            'price' => 'required|numeric',
-        ]);
+        $validated = $request->validated();
+        $validated['user_id'] = auth()->id();
 
-        Product::create([
-            'name'    => $request->name,
-            'price'   => $request->price,
-            'user_id' => auth()->id(), // simpan siapa yang membuat
-        ]);
+        try {
+            Product::create($validated);
+            return redirect()
+                ->route('products.index')
+                ->with('success', 'Product created successfully.');
 
-        return redirect()->route('products.index')->with('success', 'Produk berhasil ditambahkan.');
+        } catch (QueryException $e) {
+            Log::error('Product store database error', ['message' => $e->getMessage()]);
+            return redirect()->back()->withInput()->with('error', 'Database error.');
+        } catch (\Throwable $e) {
+            Log::error('Product store unexpected error', ['message' => $e->getMessage()]);
+            return redirect()->back()->withInput()->with('error', 'Unexpected error occurred.');
+        }
+    }
+
+    public function show(Product $product)
+    {
+        return view('products.show', compact('product'));
     }
 
     public function edit(Product $product)
     {
-        // Cek policy: admin DAN pemilik produk
         $this->authorize('update', $product);
-
         return view('products.edit', compact('product'));
     }
 
@@ -53,19 +64,24 @@ class ProductController extends Controller
 
         $request->validate([
             'name'  => 'required|string|max:255',
-            'price' => 'required|numeric',
+            'qty'   => 'required|integer|min:1', // Diganti ke qty
+            'price' => 'required|numeric|min:1000',
+        ], [
+            'name.required'  => 'Nama produk wajib diisi.',
+            'qty.min'        => 'Jumlah produk minimal 1.',
+            'price.required' => 'Harga produk wajib diisi.',
+            'price.min'      => 'Harga produk minimal Rp 1.000.',
         ]);
 
-        $product->update($request->only('name', 'price'));
+        // Pastikan hanya name, qty, dan price yang diupdate
+        $product->update($request->only('name', 'qty', 'price'));
 
         return redirect()->route('products.index')->with('success', 'Produk berhasil diupdate.');
     }
 
     public function destroy(Product $product)
     {
-        // Cek policy: admin DAN pemilik produk
         $this->authorize('delete', $product);
-
         $product->delete();
 
         return redirect()->route('products.index')->with('success', 'Produk berhasil dihapus.');
