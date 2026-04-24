@@ -2,24 +2,23 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Product extends Model
 {
-    // Tentukan kolom mana saja yang boleh diisi (Mass Assignment)
+    use HasFactory;
+
     protected $fillable = [
-        'user_id',
         'name',
-        'quantity',
+        'qty', // Sesuai database kamu di phpMyAdmin
         'price',
+        'user_id',
+        'category_id',
     ];
 
-    /**
-     * Relasi ke User (Setiap produk dimiliki oleh satu user)
-     */
-    public function user(): BelongsTo
+    public function category()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(Category::class);
     }
 }
